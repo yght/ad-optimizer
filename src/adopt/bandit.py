@@ -5,13 +5,20 @@ it keeps spending on the losing variant right up until the end. A bandit
 shifts spend towards what is winning while it is still learning, which on a
 campaign with real money on it is worth a great deal.
 
-Starting with the model: a Beta posterior per variant. The allocator goes on
-top of this.
+Thompson sampling, specifically: model each variant's conversion rate as a
+Beta posterior, draw one sample from each, and give the impression to
+whichever sample came out highest. Variants that might be good get explored
+in proportion to the probability that they actually are.
+
+Everything here is pure and takes its randomness as a parameter, so the tests
+are deterministic and a disputed allocation can be replayed exactly.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import random
+from dataclasses import dataclass, replace
+from typing import Iterable, Sequence
 
 
 @dataclass(frozen=True)
@@ -90,3 +97,74 @@ def posterior_mean(variant: Variant, priors: Priors = Priors()) -> float:
     """
     a, b = posterior(variant, priors)
     return a / (a + b)
+
+
+def sample_rate(variant: Variant, rng: random.Random, priors: Priors = Priors()) -> float:
+    """One draw from a variant's posterior."""
+    a, b = posterior(variant, priors)
+    return rng.betavariate(a, b)
+
+
+def choose(
+    variants: Sequence[Variant],
+    rng: random.Random,
+    priors: Priors = Priors(),
+) -> str:
+    """Pick one variant to serve the next impression.
+
+    Ties break on the first variant in order rather than randomly, so a
+    replay with the same seed and the same inputs gives the same answer.
+    """
+    if not variants:
+        raise ValueError("No variants to choose from")
+
+    best_id = variants[0].id
+    best_draw = -1.0
+
+    for variant in variants:
+        draw = sample_rate(variant, rng, priors)
+        if draw > best_draw:
+            best_draw = draw
+            best_id = variant.id
+
+    return best_id
+
+
+def allocation(
+    variants: Sequence[Variant],
+    rng: random.Random,
+    draws: int = 10_000,
+    priors: Priors = Priors(),
+) -> dict[str, float]:
+    """Share of traffic each variant should get, summing to 1.
+
+    Estimated by sampling rather than solved in closed form - the integral has
+    no general analytic solution past two variants, and Monte Carlo with ten
+    thousand draws is accurate to well within the noise of the campaign
+    itself.
+    """
+    if not variants:
+        return {}
+
+    wins = {v.id: 0 for v in variants}
+
+    for _ in range(draws):
+        wins[choose(variants, rng, priors)] += 1
+
+    return {vid: count / draws for vid, count in wins.items()}
+
+
+def probability_best(
+    variants: Sequence[Variant],
+    rng: random.Random,
+    draws: int = 10_000,
+    priors: Priors = Priors(),
+) -> dict[str, float]:
+    """Probability each variant is the best one.
+
+    Identical computation to `allocation` - under Thompson sampling the share
+    of traffic a variant earns *is* the probability it is best. They are named
+    separately because they answer different questions and the callers want
+    different things.
+    """
+    return allocation(variants, rng, draws, priors)
