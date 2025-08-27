@@ -26,6 +26,7 @@ class Platform(str, Enum):
 class AssetType(str, Enum):
     HEADLINE = "headline"
     DESCRIPTION = "description"
+    PRIMARY_TEXT = "primary_text"
     PATH = "path"
 
 
@@ -52,6 +53,25 @@ SPECS: dict[Platform, dict[AssetType, AssetSpec]] = {
         AssetType.HEADLINE: AssetSpec(max_length=30, min_count=3, max_count=15),
         AssetType.DESCRIPTION: AssetSpec(max_length=90, min_count=2, max_count=4),
         AssetType.PATH: AssetSpec(max_length=15, min_count=0, max_count=2),
+    },
+    Platform.META: {
+        AssetType.PRIMARY_TEXT: AssetSpec(
+            max_length=500, min_count=1, max_count=5, recommended_length=125
+        ),
+        AssetType.HEADLINE: AssetSpec(
+            max_length=255, min_count=1, max_count=5, recommended_length=40
+        ),
+        AssetType.DESCRIPTION: AssetSpec(
+            max_length=255, min_count=0, max_count=5, recommended_length=30
+        ),
+    },
+    Platform.LINKEDIN: {
+        AssetType.PRIMARY_TEXT: AssetSpec(
+            max_length=600, min_count=1, max_count=1, recommended_length=150
+        ),
+        AssetType.HEADLINE: AssetSpec(
+            max_length=200, min_count=1, max_count=1, recommended_length=70
+        ),
     },
 }
 
