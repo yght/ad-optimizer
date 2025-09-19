@@ -6,8 +6,9 @@ character over. So nothing generated here is returned to the caller until it
 has been through `specs.check_group`, and anything that fails goes back to the
 model with the specific failures attached.
 
-Copy is validated before it is returned. Repairing it automatically comes
-next; for now the caller gets the issues and decides.
+Two rounds of repair, then give up and return what passed. An endless repair
+loop against a model that keeps producing 31-character headlines burns money
+and does not converge.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from .specs import SPECS, AssetType, Issue, Platform, check_group, is_publishabl
 log = logging.getLogger(__name__)
 
 MODEL = "claude-opus-5"
+MAX_REPAIR_ROUNDS = 2
 
 
 class AdCopy(BaseModel):
@@ -115,38 +117,6 @@ def _brief_prompt(brief: str, platform: Platform, count: int) -> str:
     )
 
 
-def _required_assets(platform: Platform) -> set[AssetType]:
-    """Which asset types this platform actually has.
-
-    Search and social differ structurally, not just in length limits: Meta and
-    LinkedIn lead with a body of primary text that Google search ads have no
-    field for at all.
-    """
-    return {
-        asset_type
-        for asset_type, spec in SPECS.get(platform, {}).items()
-        if spec.min_count > 0
-    }
-
-
-def _brief_prompt(brief: str, platform: Platform, count: int) -> str:
-    wanted = _required_assets(platform)
-
-    asks = [f"{count} headlines"]
-    if AssetType.DESCRIPTION in wanted:
-        asks.append("at least 2 descriptions")
-    if AssetType.PRIMARY_TEXT in wanted:
-        asks.append("one piece of primary text, which is the body people read first")
-
-    return (
-        f"Write ad copy for this campaign, targeting {platform.value}.\n\n"
-        f"Brief:\n{brief}\n\n"
-        f"Give {', and '.join(asks)}. Vary the angle between headlines - a set "
-        f"that says the same thing five ways gives the platform nothing to "
-        f"optimise with."
-    )
-
-
 def _repair_prompt(issues: list[Issue]) -> str:
     """Feed the validator's output back verbatim.
 
@@ -197,7 +167,7 @@ def generate(
     result: AdCopy | None = None
     issues: list[Issue] = []
 
-    if True:
+    for round_index in range(MAX_REPAIR_ROUNDS + 1):
         response = client.messages.parse(
             model=MODEL,
             max_tokens=4096,
@@ -224,9 +194,24 @@ def generate(
         result = response.parsed_output
         issues = check_group(_assets_for(result, platform), platform)
 
-        return CopyResult(result, issues, usages, 0, cleaned.counts)
+        if is_publishable(issues):
+            return CopyResult(result, issues, usages, round_index, cleaned.counts)
 
-    raise AssertionError("unreachable")
+        if round_index == MAX_REPAIR_ROUNDS:
+            break
+
+        log.info("repair round %d: %d fatal issues", round_index + 1,
+                 sum(1 for i in issues if i.fatal))
+
+        messages = messages + [
+            {"role": "assistant", "content": result.model_dump_json()},
+            {"role": "user", "content": _repair_prompt(issues)},
+        ]
+
+    # Out of rounds. Return what we have with the issues attached rather than
+    # raising - a caller may well want the three headlines that passed.
+    assert result is not None
+    return CopyResult(result, issues, usages, MAX_REPAIR_ROUNDS, cleaned.counts)
 
 
 def _assets_for(copy: AdCopy, platform: Platform) -> dict[AssetType, list[str]]:
