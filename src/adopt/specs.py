@@ -12,6 +12,7 @@ asking a model to count characters and trusting the answer is not a strategy.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 from enum import Enum
 
@@ -77,7 +78,17 @@ SPECS: dict[Platform, dict[AssetType, AssetSpec]] = {
 
 
 def counted_length(text: str, platform: Platform) -> int:
-    """How long the platform thinks this string is."""
+    """How long the platform thinks this string is.
+
+    Google and Microsoft count a full-width character - CJK, and the
+    full-width Latin forms - as two. A headline of fifteen Japanese
+    characters is at the thirty character limit exactly, and counting
+    `len(text)` says fifteen and passes copy that gets rejected on upload.
+
+    Meta and LinkedIn count code points, so `len` is right for those.
+    """
+    if platform in (Platform.GOOGLE, Platform.MICROSOFT):
+        return sum(2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1 for ch in text)
     return len(text)
 
 
