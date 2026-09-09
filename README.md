@@ -9,6 +9,21 @@ and brand guidelines are gone, and the verticals are made up. The allocation
 maths, the platform rules and the validate-then-repair pattern are the real
 ones.*
 
+## What I want to demonstrate
+
+I want to show how I combine statistical decision-making with an LLM while keeping validation and control in ordinary application code.
+
+- **Applied AI:** structured copy generation, deterministic checks and bounded repair attempts.
+- **Statistical reasoning:** Thompson sampling and explicit exploration settings.
+- **Testability:** injected randomness and stub model clients for repeatable checks.
+- **Customer value:** helping campaign teams review usable copy and understand allocation decisions, with human review for quality and policy judgments.
+
+**Start here:** [allocation logic](src/adopt/bandit.py), [copy generation](src/adopt/copy.py), and [repair-loop tests](tests/test_copy_repair.py).
+
+**Scope:** a library and offline test suite, not an ad-platform integration or evidence of measured campaign uplift. Live model access and output quality require separate validation.
+
+**Known correctness gap:** the current exploration-floor redistribution can push another variant below the requested minimum. For shares of 0%, 5% and 95%, a 5% floor produces 5%, 4.75% and 90.25%. The floor needs to be enforced across the final allocation.
+
 ## Two ideas, and they're the same idea
 
 **Don't ask a language model to do arithmetic you can do yourself.**
@@ -52,7 +67,8 @@ Two guardrails on top, because pure Thompson sampling has a failure mode:
 
 - **`min_impressions`** — nothing gets paused before it's had a fair run,
   whatever the posterior says.
-- **`explore_floor`** — every live variant keeps 5%. Without it the sampler
+- **`explore_floor`** — intended to reserve 5% for every live variant; the
+  redistribution edge case documented above still needs fixing. Without it the sampler
   starves a variant on the strength of a dozen impressions, and a starved
   variant never recovers because it never gets the data that would redeem it.
 
