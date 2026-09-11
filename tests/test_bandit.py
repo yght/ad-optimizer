@@ -128,6 +128,18 @@ class TestAllocation:
 
 
 class TestFloor:
+    @pytest.mark.parametrize("shares", [
+        {"a": 0.0, "b": 0.05, "c": 0.95},
+        {"a": 0.0, "b": 0.051, "c": 0.949},
+        {"a": 0.0, "b": 0.01, "c": 0.052, "d": 0.938},
+    ])
+    def test_redistribution_never_starves_another_variant(self, shares):
+        original = dict(shares)
+        lifted = apply_floor(shares, 0.05)
+        assert min(lifted.values()) >= 0.05
+        assert sum(lifted.values()) == pytest.approx(1.0)
+        assert shares == original
+
     def test_lifts_a_starved_variant(self):
         lifted = apply_floor({"a": 0.99, "b": 0.01}, 0.05)
         assert lifted["b"] == pytest.approx(0.05)

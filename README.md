@@ -22,7 +22,13 @@ I want to show how I combine statistical decision-making with an LLM while keepi
 
 **Scope:** a library and offline test suite, not an ad-platform integration or evidence of measured campaign uplift. Live model access and output quality require separate validation.
 
-**Known correctness gap:** the current exploration-floor redistribution can push another variant below the requested minimum. For shares of 0%, 5% and 95%, a 5% floor produces 5%, 4.75% and 90.25%. The floor needs to be enforced across the final allocation.
+## Recent improvements — Yousof
+
+- Fixed exploration-floor redistribution so reserving traffic for one variant does not push another below the minimum. Infeasible floors retain the equal-split fallback.
+- Added regression cases for allocations at and near the floor, including cascading redistribution.
+- Added [GitHub Actions checks](.github/workflows/ci.yml) for Python 3.12 and 3.13 on pushes and pull requests.
+
+Local validation: 123 tests passed on Python 3.12. The workflow checks compatibility across both configured versions.
 
 ## Two ideas, and they're the same idea
 
@@ -67,8 +73,8 @@ Two guardrails on top, because pure Thompson sampling has a failure mode:
 
 - **`min_impressions`** — nothing gets paused before it's had a fair run,
   whatever the posterior says.
-- **`explore_floor`** — intended to reserve 5% for every live variant; the
-  redistribution edge case documented above still needs fixing. Without it the sampler
+- **`explore_floor`** — reserves 5% for every live variant when feasible.
+  Redistribution repeats until the final shares respect the minimum. Without it the sampler
   starves a variant on the strength of a dozen impressions, and a starved
   variant never recovers because it never gets the data that would redeem it.
 
@@ -86,7 +92,7 @@ got redacted before it went out.
 
 All of that is testable with a stub client. `tests/test_copy_repair.py` covers
 the full repair loop, the round limit, refusal handling, and the redaction
-pass, and runs offline in under half a second with no API key. 120 tests, none
+pass, and runs offline in under half a second with no API key. 123 tests, none
 of which cost anything.
 
 The one thing not covered is whether the copy is any good. That needs human

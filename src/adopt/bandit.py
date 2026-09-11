@@ -198,38 +198,36 @@ class Guardrails:
 
 
 def apply_floor(shares: dict[str, float], floor: float) -> dict[str, float]:
-    """Lift every share to at least `floor`, then renormalise.
+    """Reserve the floor, redistributing proportionally among remaining variants.
 
-    Taken proportionally from the variants that are above the floor, so the
-    ordering among the leaders is preserved.
+    Redistribution can push a second variant below the floor. Freeze each
+    newly constrained variant and repeat until the remaining shares fit.
+    Infeasible floors retain the documented equal-split fallback.
     """
     if not shares:
         return {}
 
     if floor * len(shares) >= 1.0:
-        # The floor cannot be satisfied - fall back to an even split rather
-        # than producing shares that do not sum to one.
-        even = 1.0 / len(shares)
-        return {k: even for k in shares}
+        return {key: 1.0 / len(shares) for key in shares}
 
-    below = {k: v for k, v in shares.items() if v < floor}
-    if not below:
-        return dict(shares)
+    remaining = dict(shares)
+    fixed: dict[str, float] = {}
+    while remaining:
+        budget = 1.0 - len(fixed) * floor
+        total = sum(remaining.values())
+        proposed = {
+            key: budget * value / total if total > 0 else budget / len(remaining)
+            for key, value in remaining.items()
+        }
+        constrained = [key for key, value in proposed.items() if value < floor]
+        if not constrained:
+            fixed.update(proposed)
+            break
+        for key in constrained:
+            fixed[key] = floor
+            del remaining[key]
 
-    lifted = len(below) * floor
-    remaining = 1.0 - lifted
-    above_total = sum(v for k, v in shares.items() if k not in below)
-
-    result = {}
-    for key, value in shares.items():
-        if key in below:
-            result[key] = floor
-        elif above_total > 0:
-            result[key] = remaining * (value / above_total)
-        else:
-            result[key] = remaining / max(1, len(shares) - len(below))
-
-    return result
+    return {key: fixed[key] for key in shares}
 
 
 @dataclass(frozen=True)
