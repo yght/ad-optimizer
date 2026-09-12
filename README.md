@@ -148,3 +148,9 @@ same account produce two ledgers and neither knows about the other.
 `ALWAYS_PROBLEMATIC` is one list for every vertical. Financial services and
 supplements need different lists, and the right shape is a per-vertical
 ruleset rather than a global one with exceptions.
+
+## Engineering practices
+
+[Contribution and verification guide](CONTRIBUTING.md) · [Review template](.github/pull_request_template.md)
+
+Offline tests do not assess generated-copy quality or live-provider compatibility. Evaluate those separately before changing providers or publishing copy.
